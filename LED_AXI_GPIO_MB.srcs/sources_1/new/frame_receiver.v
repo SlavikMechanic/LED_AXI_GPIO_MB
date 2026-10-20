@@ -19,55 +19,153 @@
 // 
 //////////////////////////////////////////////////////////////////////////////////
 
-
 module frame_receiver (
     input  wire        aclk,
     input  wire        aresetn,
+
+    // Control from MicroBlaze
     input  wire        start,
 
-    output reg  [31:0] m_axis_tdata,
-    output reg         m_axis_tvalid,
+    // External 8-bit pixel stream
+    input  wire [7:0]  pixel_data,
+    input  wire        pixel_valid,
+    output wire        pixel_ready,
+
+    // AXI4-Stream master to AXI DMA S_AXIS_S2MM
+    output wire [31:0] m_axis_tdata,
+    output wire        m_axis_tvalid,
     input  wire        m_axis_tready,
-    output reg         m_axis_tlast,
+    output wire        m_axis_tlast,
     output wire [3:0]  m_axis_tkeep
 );
 
-    // 320 x 200 pixels, 4 pixels packed into each 32-bit word
-    localparam FRAME_WORDS = 16000;
+    localparam FRAME_PIXELS = 64000;
+    localparam FRAME_WORDS  = 16000;
 
-    reg [13:0] word_count;
+    // FIFO: 1024 words x 32 bits
+    localparam FIFO_DEPTH = 1024;
+    localparam PTR_WIDTH  = 10;
+    localparam CNT_WIDTH  = 11;
+
+    reg [31:0] fifo_mem [0:FIFO_DEPTH-1];
+
+    reg [PTR_WIDTH-1:0] wr_ptr;
+    reg [PTR_WIDTH-1:0] rd_ptr;
+    reg [CNT_WIDTH-1:0] fifo_count;
+
     reg        active;
+    reg [15:0] pixel_count;
+    reg [13:0] sent_words;
 
-    assign m_axis_tkeep = 4'b1111;
+    // Pack four 8-bit pixels into one 32-bit word
+    reg [31:0] pack_reg;
+    reg [1:0]  pack_count;
+
+    wire fifo_pop;
+    wire pixel_accept;
+    wire fifo_push;
+
+    assign m_axis_tvalid = (fifo_count != 0);
+    assign m_axis_tdata  = fifo_mem[rd_ptr];
+    assign m_axis_tkeep  = 4'b1111;
+
+    assign m_axis_tlast =
+        m_axis_tvalid && (sent_words == FRAME_WORDS - 1);
+
+    assign fifo_pop = m_axis_tvalid && m_axis_tready;
+
+    // Accept a pixel only when the receiver is active.
+    // If the FIFO is full, a pixel completing a word must wait
+    // unless a word is simultaneously removed from the FIFO.
+    assign pixel_ready =
+        active &&
+        ((pack_count != 2'd3) ||
+         (fifo_count < FIFO_DEPTH) ||
+         fifo_pop);
+
+    assign pixel_accept = pixel_valid && pixel_ready;
+    assign fifo_push = pixel_accept && (pack_count == 2'd3);
 
     always @(posedge aclk) begin
         if (!aresetn) begin
-            word_count    <= 14'd0;
-            active        <= 1'b0;
-            m_axis_tdata  <= 32'd0;
-            m_axis_tvalid <= 1'b0;
-            m_axis_tlast  <= 1'b0;
+            wr_ptr      <= 0;
+            rd_ptr      <= 0;
+            fifo_count  <= 0;
+            active      <= 0;
+            pixel_count <= 0;
+            sent_words  <= 0;
+            pack_reg    <= 0;
+            pack_count  <= 0;
         end else begin
-            if (start && !active && !m_axis_tvalid) begin
-                active        <= 1'b1;
-                word_count    <= 14'd0;
-                m_axis_tdata  <= 32'd0;
-                m_axis_tvalid <= 1'b1;
-                m_axis_tlast  <= 1'b0;
+
+            // Start a new frame only when the previous frame
+            // has been completely drained from the FIFO.
+            if (start && !active && (fifo_count == 0)) begin
+                active      <= 1'b1;
+                pixel_count <= 0;
+                sent_words  <= 0;
+                pack_count  <= 0;
+                pack_reg    <= 0;
             end
 
-            if (m_axis_tvalid && m_axis_tready) begin
-                if (word_count == FRAME_WORDS - 1) begin
-                    m_axis_tvalid <= 1'b0;
-                    m_axis_tlast  <= 1'b0;
-                    active        <= 1'b0;
-                    word_count    <= 14'd0;
+            // Receive pixels and pack four bytes per word.
+            if (pixel_accept) begin
+                case (pack_count)
+                    2'd0: begin
+                        pack_reg[7:0] <= pixel_data;
+                        pack_count    <= 2'd1;
+                    end
+
+                    2'd1: begin
+                        pack_reg[15:8] <= pixel_data;
+                        pack_count     <= 2'd2;
+                    end
+
+                    2'd2: begin
+                        pack_reg[23:16] <= pixel_data;
+                        pack_count      <= 2'd3;
+                    end
+
+                    2'd3: begin
+                        pack_reg[31:24] <= pixel_data;
+                        pack_count      <= 2'd0;
+                    end
+                endcase
+
+                if (pixel_count == FRAME_PIXELS - 1) begin
+                    active      <= 1'b0;
+                    pixel_count <= 0;
+                    pack_count  <= 0;
                 end else begin
-                    word_count    <= word_count + 1'b1;
-                    m_axis_tdata  <= word_count + 1'b1;
-                    m_axis_tlast  <= (word_count == FRAME_WORDS - 2);
+                    pixel_count <= pixel_count + 1'b1;
                 end
             end
+
+            // Write each completed 32-bit word to the FIFO.
+            if (fifo_push) begin
+                fifo_mem[wr_ptr] <=
+                    {pixel_data, pack_reg[23:0]};
+
+                wr_ptr <= wr_ptr + 1'b1;
+            end
+
+            // AXI4-Stream handshake: transfer only when both
+            // TVALID and TREADY are high.
+            if (fifo_pop) begin
+                rd_ptr <= rd_ptr + 1'b1;
+     if (sent_words == FRAME_WORDS - 1)
+                    sent_words <= 0;
+                else
+                    sent_words <= sent_words + 1'b1;
+            end
+
+            // Update FIFO occupancy, including simultaneous
+            // read and write operations.
+            case ({fifo_push, fifo_pop})
+                2'b10: fifo_count <= fifo_count + 1'b1;
+                2'b01: fifo_count <= fifo_count - 1'b1;
+                default: fifo_count <= fifo_count;
+            endcase
         end
     end
 

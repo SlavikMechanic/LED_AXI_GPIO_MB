@@ -1,7 +1,7 @@
 {
   "design": {
     "design_info": {
-      "boundary_crc": "0x43E8F73BAB0FEB4A",
+      "boundary_crc": "0x864313961216E6C2",
       "device": "xc7z020clg400-1",
       "gen_directory": "../../../../LED_AXI_GPIO_MB.gen/sources_1/bd/design_1",
       "name": "design_1",
@@ -126,36 +126,6 @@
             "right": "0"
           }
         }
-      },
-      "diff_clock_rtl_0": {
-        "mode": "Slave",
-        "vlnv_bus_definition": "xilinx.com:interface:diff_clock:1.0",
-        "vlnv": "xilinx.com:interface:diff_clock_rtl:1.0",
-        "parameters": {
-          "CAN_DEBUG": {
-            "value": "false",
-            "value_src": "default"
-          },
-          "FREQ_HZ": {
-            "value": "100000000"
-          }
-        },
-        "hdl_attributes": {
-          "LOCKED": {
-            "value": "FALSE",
-            "value_src": "default"
-          }
-        },
-        "port_maps": {
-          "CLK_N": {
-            "physical_name": "diff_clock_rtl_0_clk_n",
-            "direction": "I"
-          },
-          "CLK_P": {
-            "physical_name": "diff_clock_rtl_0_clk_p",
-            "direction": "I"
-          }
-        }
       }
     },
     "ports": {
@@ -171,6 +141,42 @@
             "value": "ACTIVE_LOW"
           }
         }
+      },
+      "clk_100MHz": {
+        "type": "clk",
+        "direction": "I",
+        "parameters": {
+          "CLK_DOMAIN": {
+            "value": "design_1_clk_100MHz",
+            "value_src": "default"
+          },
+          "FREQ_HZ": {
+            "value": "125000000"
+          },
+          "FREQ_TOLERANCE_HZ": {
+            "value": "0",
+            "value_src": "default"
+          },
+          "INSERT_VIP": {
+            "value": "0",
+            "value_src": "default"
+          },
+          "PHASE": {
+            "value": "0.0",
+            "value_src": "default"
+          }
+        }
+      },
+      "pixel_data_0": {
+        "direction": "I",
+        "left": "7",
+        "right": "0"
+      },
+      "pixel_valid_0": {
+        "direction": "I"
+      },
+      "pixel_ready_0": {
+        "direction": "O"
       }
     },
     "components": {
@@ -537,8 +543,26 @@
         "inst_hier_path": "clk_wiz_1",
         "has_run_ip_tcl": "true",
         "parameters": {
+          "CLKIN1_JITTER_PS": {
+            "value": "80.0"
+          },
+          "CLKOUT1_JITTER": {
+            "value": "124.615"
+          },
+          "CLKOUT1_PHASE_ERROR": {
+            "value": "96.948"
+          },
+          "MMCM_CLKFBOUT_MULT_F": {
+            "value": "8.000"
+          },
+          "MMCM_CLKIN1_PERIOD": {
+            "value": "8.000"
+          },
+          "PRIM_IN_FREQ": {
+            "value": "125.000"
+          },
           "PRIM_SOURCE": {
-            "value": "Differential_clock_capable_pin"
+            "value": "Single_ended_clock_capable_pin"
           }
         }
       },
@@ -560,6 +584,9 @@
         "parameters": {
           "C_GPIO_WIDTH": {
             "value": "4"
+          },
+          "C_IS_DUAL": {
+            "value": "1"
           }
         }
       },
@@ -885,8 +912,8 @@
                 "value_src": "ip_prop"
               },
               "CLK_DOMAIN": {
-                "value": "design_1_clk_wiz_1_0_clk_out1",
-                "value_src": "default_prop"
+                "value": "/clk_wiz_1_clk_out1",
+                "value_src": "ip_prop"
               }
             },
             "port_maps": {
@@ -939,8 +966,8 @@
                 "value_src": "ip_prop"
               },
               "CLK_DOMAIN": {
-                "value": "design_1_clk_wiz_1_0_clk_out1",
-                "value_src": "default_prop"
+                "value": "/clk_wiz_1_clk_out1",
+                "value_src": "ip_prop"
               }
             }
           },
@@ -956,6 +983,17 @@
           },
           "start": {
             "direction": "I"
+          },
+          "pixel_data": {
+            "direction": "I",
+            "left": "7",
+            "right": "0"
+          },
+          "pixel_valid": {
+            "direction": "I"
+          },
+          "pixel_ready": {
+            "direction": "O"
           }
         }
       },
@@ -1035,12 +1073,6 @@
           "axi_dma_0/S_AXI_LITE"
         ]
       },
-      "diff_clock_rtl_0_1": {
-        "interface_ports": [
-          "diff_clock_rtl_0",
-          "clk_wiz_1/CLK_IN1_D"
-        ]
-      },
       "frame_receiver_0_m_axis": {
         "interface_ports": [
           "axi_dma_0/S_AXIS_S2MM",
@@ -1073,10 +1105,28 @@
       }
     },
     "nets": {
+      "axi_gpio_0_gpio2_io_o": {
+        "ports": [
+          "axi_gpio_0/gpio2_io_o",
+          "frame_receiver_0/start"
+        ]
+      },
+      "clk_100MHz_1": {
+        "ports": [
+          "clk_100MHz",
+          "clk_wiz_1/clk_in1"
+        ]
+      },
       "clk_wiz_1_locked": {
         "ports": [
           "clk_wiz_1/locked",
           "rst_clk_wiz_1_100M/dcm_locked"
+        ]
+      },
+      "frame_receiver_0_pixel_ready": {
+        "ports": [
+          "frame_receiver_0/pixel_ready",
+          "pixel_ready_0"
         ]
       },
       "mdm_1_debug_sys_rst": {
@@ -1101,6 +1151,18 @@
           "axi_bram_ctrl_0/s_axi_aclk",
           "axi_dma_0/s_axi_lite_aclk",
           "frame_receiver_0/aclk"
+        ]
+      },
+      "pixel_data_0_1": {
+        "ports": [
+          "pixel_data_0",
+          "frame_receiver_0/pixel_data"
+        ]
+      },
+      "pixel_valid_0_1": {
+        "ports": [
+          "pixel_valid_0",
+          "frame_receiver_0/pixel_valid"
         ]
       },
       "reset_rtl_0_1": {
@@ -1132,12 +1194,6 @@
           "axi_smc_1/aresetn",
           "axi_dma_0/axi_resetn",
           "frame_receiver_0/aresetn"
-        ]
-      },
-      "xlconstant_0_dout": {
-        "ports": [
-          "xlconstant_0/dout",
-          "frame_receiver_0/start"
         ]
       }
     },
